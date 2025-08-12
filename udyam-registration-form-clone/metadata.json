@@ -1,0 +1,5 @@
+{
+  "name": "Udyam Registration Form Clone",
+  "description": "A React-based clone of the Indian Government's Udyam Registration portal for MSMEs. This application replicates the user interface for new enterprise registration, focusing on modern frontend practices with Tailwind CSS for styling.",
+  "requestFramePermissions": []
+}
