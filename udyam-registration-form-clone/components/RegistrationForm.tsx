@@ -2,19 +2,35 @@
 import React, { useState } from 'react';
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:3001';
+const AADHAAR_REGEX = /^[2-9][0-9]{11}$/;
+const NAME_REGEX = /^[a-zA-Z\s.]{2,}$/;
 
 const RegistrationForm: React.FC = () => {
     const [aadhaar, setAadhaar] = useState('');
     const [name, setName] = useState('');
     const [agreed, setAgreed] = useState(true);
     const [message, setMessage] = useState('');
+    const [errors, setErrors] = useState<{ aadhaar?: string; name?: string }>({});
+    const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+    const validateAadhaar = (v: string) => {
+      if (!v) return 'Aadhaar is required';
+      if (!AADHAAR_REGEX.test(v)) return 'Enter 12 digits starting with 2-9';
+      return '';
+    };
+
+    const validateName = (v: string) => {
+      if (!v) return 'Name is required';
+      if (!NAME_REGEX.test(v)) return 'Only letters, spaces and "."; min 2 chars';
+      return '';
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!aadhaar || !name) {
-            setMessage('Aadhaar Number and Name are required.');
-            return;
-        }
+        const aadhaarErr = validateAadhaar(aadhaar);
+        const nameErr = validateName(name);
+        setErrors(prev => ({ ...prev, aadhaar: aadhaarErr, name: nameErr }));
+        if (aadhaarErr || nameErr) return;
         if (!agreed) {
             setMessage('You must agree to the declaration.');
             return;
@@ -66,13 +82,20 @@ const RegistrationForm: React.FC = () => {
                             <input
                                 type="text"
                                 id="aadhaar"
+                                inputMode="numeric"
                                 value={aadhaar}
-                                onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, ''))}
+                                onChange={(e) => {
+                                  const v = e.target.value.replace(/\D/g, '').slice(0, 12);
+                                  setAadhaar(v);
+                                  if (touched.aadhaar) setErrors(prev => ({ ...prev, aadhaar: validateAadhaar(v) }));
+                                }}
+                                onBlur={() => { setTouched(t => ({ ...t, aadhaar: true })); setErrors(prev => ({ ...prev, aadhaar: validateAadhaar(aadhaar) })); }}
                                 maxLength={12}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                className={`w-full px-3 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 ${errors.aadhaar ? 'border-red-500' : 'border-gray-300'}`}
                                 placeholder="Your Aadhaar No"
                                 autoComplete="off"
                             />
+                            {errors.aadhaar && (<p className="mt-1 text-sm text-red-600">{errors.aadhaar}</p>)}
                         </div>
                         <div>
                             <label htmlFor="name" className="block text-sm font-medium text-gray-800 mb-1">
@@ -82,11 +105,17 @@ const RegistrationForm: React.FC = () => {
                                 type="text"
                                 id="name"
                                 value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setName(v);
+                                  if (touched.name) setErrors(prev => ({ ...prev, name: validateName(v) }));
+                                }}
+                                onBlur={() => { setTouched(t => ({ ...t, name: true })); setErrors(prev => ({ ...prev, name: validateName(name) })); }}
+                                className={`w-full px-3 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
                                 placeholder="Name as per Aadhaar"
                                 autoComplete="off"
                             />
+                            {errors.name && (<p className="mt-1 text-sm text-red-600">{errors.name}</p>)}
                         </div>
                     </div>
                     
