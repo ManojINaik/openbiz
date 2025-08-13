@@ -16,6 +16,7 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const OTP_MOCK_ENABLED = String(process.env.OTPMOCK || process.env.OTP_MOCK || '').toLowerCase() === 'true';
 
 // Database connection
 const pool = new Pool({
@@ -36,10 +37,11 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting (disabled during tests)
+// Rate limiting (skip in dev and when OTP mock is enabled)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 100,
+  skip: () => OTP_MOCK_ENABLED || process.env.NODE_ENV !== 'production'
 });
 if (process.env.NODE_ENV !== 'test') {
   app.use(limiter);
@@ -50,6 +52,8 @@ const otpLimiter = rateLimit({
   windowMs: process.env.NODE_ENV === 'test' ? 200 : 5 * 60 * 1000,
   max: 3,
   skipFailedRequests: true,
+  // In dev or when OTP mock is enabled, skip rate limiting to ease testing
+  skip: () => OTP_MOCK_ENABLED || process.env.NODE_ENV !== 'production',
   keyGenerator: (req) => {
     if (process.env.NODE_ENV === 'test' && req.headers['x-rl-key']) {
       return String(req.headers['x-rl-key']);
@@ -150,6 +154,17 @@ app.post('/api/generate-otp', otpLimiter, validateAadhaarData, async (req, res) 
     }
 
     const { aadhaar_number, entrepreneur_name } = req.body;
+    
+    // Dev mock: bypass DB and SMS when enabled
+    if (OTP_MOCK_ENABLED) {
+      return res.json({
+        success: true,
+        message: 'OTP sent to registered mobile number',
+        expires_in: 600,
+        sent_to: '*******5273',
+        mock: true
+      });
+    }
 
     // Check if Aadhaar already exists in registration
     const existingAadhaar = await pool.query(
@@ -175,6 +190,7 @@ app.post('/api/generate-otp', otpLimiter, validateAadhaarData, async (req, res) 
 
     // In real implementation, get mobile number from UIDAI API
     const mockMobileNumber = '9876543210'; // This should come from UIDAI verification
+    const maskedMobile = `*******${mockMobileNumber.slice(-4)}`;
 
     // Send OTP
     const smsResult = await sendOTP(mockMobileNumber, otp);
@@ -183,7 +199,8 @@ app.post('/api/generate-otp', otpLimiter, validateAadhaarData, async (req, res) 
       res.json({
         success: true,
         message: 'OTP sent to registered mobile number',
-        expires_in: 600 // seconds
+        expires_in: 600, // seconds
+        sent_to: maskedMobile
       });
     } else {
       res.status(500).json({
@@ -204,7 +221,10 @@ app.post('/api/generate-otp', otpLimiter, validateAadhaarData, async (req, res) 
 // Validate OTP
 app.post('/api/validate-otp', [
   body('aadhaar_number').matches(validationPatterns.aadhaar),
-  body('otp').matches(validationPatterns.otp)
+  body('otp').custom((value) => {
+    if (OTP_MOCK_ENABLED && value === '1234') return true;
+    return validationPatterns.otp.test(String(value));
+  })
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -217,7 +237,24 @@ app.post('/api/validate-otp', [
 
     const { aadhaar_number, otp } = req.body;
 
-    // Verify OTP
+    // Dev mock: accept '1234' and skip DB
+    if (OTP_MOCK_ENABLED) {
+      if (otp !== '1234') {
+        return res.status(400).json({ error: 'Invalid OTP', message: 'OTP is incorrect' });
+      }
+      const token = jwt.sign(
+        {
+          aadhaar_number: aadhaar_number,
+          registration_id: 1,
+          step: 1
+        },
+        process.env.JWT_SECRET || 'udyam-secret-key',
+        { expiresIn: '1h' }
+      );
+      return res.json({ success: true, message: 'Aadhaar verified successfully', token });
+    }
+
+    // Verify OTP against DB
     const otpRecord = await pool.query(
       'SELECT * FROM otp_verifications WHERE aadhaar_number = $1 AND type = $2 AND otp = $3 AND expires_at > CURRENT_TIMESTAMP',
       [aadhaar_number, 'aadhaar_verification', otp]

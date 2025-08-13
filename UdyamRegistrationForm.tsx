@@ -99,8 +99,13 @@ const UdyamRegistrationForm: React.FC = () => {
         }
         break;
       case 'otp':
-        if (otpSent && !validationPatterns.otp.test(value)) {
-          return 'Please enter valid 6-digit OTP';
+        // Allow dev mock OTP '1234' when NEXT_PUBLIC_OTPMOCK=true
+        if (otpSent) {
+          const otpMockEnabled = String((process as any)?.env?.NEXT_PUBLIC_OTPMOCK || '').toLowerCase() === 'true';
+          const isMockOtp = otpMockEnabled && value === '1234';
+          if (!isMockOtp && !validationPatterns.otp.test(value)) {
+            return 'Please enter valid 6-digit OTP';
+          }
         }
         break;
       case 'pan_number':

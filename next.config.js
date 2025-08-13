@@ -3,7 +3,10 @@ const nextConfig = {
   images: {
     domains: ['localhost'],
   },
-  env: { NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001' },
+  env: { 
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+    NEXT_PUBLIC_OTPMOCK: process.env.NEXT_PUBLIC_OTPMOCK || 'false'
+  },
   output: 'standalone',
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
